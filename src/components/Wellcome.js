@@ -49,6 +49,7 @@ const Wellcome = () => {
   const [isButtonDisabled, setIsButtonDisabled] = useState(true);
   const [error, setError] = useState(false);
   const [helperText, setHelperText] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (username.trim() && password.trim()) {
@@ -69,20 +70,43 @@ const Wellcome = () => {
       const headers = {
         authorization: "Basic " + btoa(username + ":" + password)
       };
-      const response = await axios("http://localhost:8081/sonar/getIssues", {
+
+      setIsLoading(true);
+      setIsButtonDisabled(true);
+
+      const sonar = await axios("http://localhost:8081/sonar/getIssues", {
         headers
       });
-      if (response.data.issues) {
-        history.push("/dashboard", response.data);
-      } else {
-        clear();
-        setError(true);
-        setHelperText(response.data);
-      }
-    } else {
-      clear();
-      setError(true);
-      setHelperText("Incorrect username or password");
+
+      const perforce = await axios(
+        "http://localhost:8081/perforce/getMissingMerges",
+        {
+          headers
+        }
+      );
+
+      let response = Promise.all([perforce, sonar]).then(
+        ([perforce, sonar]) => {
+          setIsLoading(false);
+          setIsButtonDisabled(true);
+          const sonarIssues = sonar.data.issues;
+          const perforceIssues = perforce.data;
+          const issues = { perforceIssues, sonarIssues };
+          const data = { issues };
+          return data;
+        }
+      );
+      response.then(issues => {
+        if (typeof issues.sonarIssues !== undefined) {
+          history.push("/dashboard", issues);
+        } else {
+          clear();
+          setError(true);
+          setHelperText("Unauthorized");
+        }
+      });
+
+      // let response;
     }
   };
   const clear = () => {
@@ -96,6 +120,7 @@ const Wellcome = () => {
     }
   };
 
+  const textButton = isLoading ? "is loading" : "Login";
   return (
     <React.Fragment>
       <form className={classes.container} noValidate autoComplete="off">
@@ -138,8 +163,9 @@ const Wellcome = () => {
               className={classes.loginBtn}
               onClick={() => handleLogin()}
               disabled={isButtonDisabled}
+              // isLoading={isLoading}
             >
-              Login
+              {textButton}
             </Button>
           </CardActions>
         </Card>
